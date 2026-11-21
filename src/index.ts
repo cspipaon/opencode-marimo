@@ -1,4 +1,5 @@
 import { Plugin } from "@opencode/plugin"
+import { resolve } from "node:path"
 import { Marimo } from "./contract"
 import { acquire, type View } from "./server"
 
@@ -35,23 +36,39 @@ export default Plugin.define({
   async setup(ctx) {
     // One setup per project directory; the manager they share owns the notebooks on this machine.
     const { manager, release } = acquire(ctx.options)
+    // Settings RPCs and notebook starts are routed to the selected project.
+    // Keep the preference outside the long-lived process manager: on hot reload
+    // it may still own live kernels and implement the previous plugin version.
+    const directory = resolve(ctx.location.directory)
+    const key = `notebook-environment:${directory}`
+    const launchOptions = async () => {
+      const mode = await ctx.storage.get(key)
+      if (mode !== "pixi" && mode !== "sandbox") return ctx.options
+      return { ...ctx.options, pixiProjects: mode === "pixi" ? [directory] : [] }
+    }
 
     // Desktop windows drive the notebooks of this server's sessions, wherever this server runs.
     const rpc = await ctx.rpc.register(Marimo, {
       state: async () => manager.state(),
       notebooks: async ({ directory }) => [...(await manager.notebooks(directory))],
       bind: (input) => manager.bind(input),
-      start: ({ id }) => manager.start(id, ctx.options),
+      start: async ({ id }) => manager.start(id, await launchOptions()),
       stop: async ({ id }) => (manager.stop(id), {}),
       unbind: async ({ id }) => (manager.unbind(id), {}),
       configure: async (settings) => (manager.configure(settings), {}),
-      environment: async ({ directory, set }) => manager.environment(directory, set),
+      environment: async ({ directory: requested, set }) => {
+        if (resolve(requested) !== directory) throw new Error("Open settings for the selected project directory.")
+        if (set === "default") await ctx.storage.remove(key)
+        else if (set) await ctx.storage.set(key, set)
+        const mode = await ctx.storage.get(key)
+        return mode === "pixi" || mode === "sandbox" ? mode : "default"
+      },
     })
     const unsubscribe = manager.subscribe((state) => void rpc.events.emit("changed", state).catch(() => undefined))
 
     // Tell the agent which notebook is this session's, every request, so it never has to guess.
-    await ctx.session.hook("context", (input) => {
-      const binding = manager.view(input.sessionID, ctx.options)
+    await ctx.session.hook("context", async (input) => {
+      const binding = manager.view(input.sessionID, await launchOptions())
       if (!binding) return
       // Every project's instance sees the hook; the first one to answer is enough.
       if (input.system.some((part) => part.type === "text" && part.text.startsWith(MARKER))) return

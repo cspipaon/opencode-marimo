@@ -477,7 +477,8 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
           const directory = await chooseFolder(server, ctx.t("settings.environment.folder"));
           if (!directory) return;
           const rpc = api(server);
-          const active = await rpc.environment({ directory });
+          const location = { location: { directory } };
+          const active = await rpc.environment({ directory }, location);
           const modes = ["default", "sandbox", "pixi"] as const;
           const set = await ctx.dialogs.select<typeof modes[number]>({
             title: `${ctx.t("settings.environment")}: ${directory}`,
@@ -487,9 +488,10 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
               value,
             })),
           });
-          if (set && set !== active) await rpc.environment({ directory, set });
+          if (set && set !== active) await rpc.environment({ directory, set }, location);
         } catch (error) {
-          ctx.toast.show({ variant: "error", title: String(error) });
+          const detail = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
+          ctx.toast.show({ variant: "error", title: `Could not select notebook environment: ${detail}` });
         }
       };
       const configure = (next: Partial<Settings>) => {
