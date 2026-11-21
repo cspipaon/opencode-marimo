@@ -20,6 +20,7 @@ interface Stored {
 }
 
 interface Running {
+  pixi: boolean
   proc: ChildProcess
   ready: Promise<string>
   up: boolean
@@ -167,12 +168,11 @@ function load(options: Record<string, unknown>) {
   }
 }
 
+const usesPixi = (directory: string, options: Record<string, unknown>) =>
+  Array.isArray(options.pixiProjects) &&
+  options.pixiProjects.some((p) => typeof p === "string" && isAbsolute(p) && resolve(p) === resolve(directory))
+
 function createManager(options: Record<string, unknown>) {
-  const pixiProjects = new Set(
-    Array.isArray(options.pixiProjects)
-      ? options.pixiProjects.filter((p): p is string => typeof p === "string" && isAbsolute(p)).map((p) => resolve(p))
-      : [],
-  )
   // marimo itself when it is installed, else uv runs it (a fresh machine often has uv but not marimo).
   const command =
     typeof options.command === "string" ? [options.command] : onPath("marimo") ? ["marimo"] : ["uvx", "marimo"]
@@ -272,9 +272,9 @@ function createManager(options: Record<string, unknown>) {
     notebooks: findNotebooks,
 
     /** The session's notebook, for the agent's context and marimo-pair's token. */
-    view: (id: string): View | undefined => {
+    view: (id: string, options: Record<string, unknown>): View | undefined => {
       const b = bindings[id]
-      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: pixiProjects.has(resolve(b.directory)) }
+      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: running.get(id)?.pixi ?? usesPixi(b.directory, options) }
     },
     /** The token of the notebook a shell command talks to, by its port. */
     tokenFor: (command: string) =>
@@ -312,7 +312,7 @@ function createManager(options: Record<string, unknown>) {
       return { owner: null, name: rel }
     },
 
-    start: async (id: string) => {
+    start: async (id: string, options: Record<string, unknown>) => {
       const existing = running.get(id)
       if (existing) return existing.ready
 
@@ -326,7 +326,7 @@ function createManager(options: Record<string, unknown>) {
         save(id, binding)
       }
 
-      const pixi = pixiProjects.has(resolve(binding.directory))
+      const pixi = usesPixi(binding.directory, options)
       if (pixi && settings.studio) throw new Error("Turn off marimo-studio before starting a Pixi project notebook.")
       const edit = [
         "edit",
@@ -363,7 +363,7 @@ function createManager(options: Record<string, unknown>) {
         proc.on("error", fail)
         proc.on("exit", (code) => fail(new Error(`marimo exited (${code}): ${output.trim().slice(-500)}`)))
       })
-      const it: Running = { proc, ready, up: false, studio, seen: Date.now() }
+      const it: Running = { proc, ready, up: false, studio, pixi, seen: Date.now() }
       running.set(id, it)
       changed()
 

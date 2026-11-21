@@ -41,7 +41,7 @@ export default Plugin.define({
       state: async () => manager.state(),
       notebooks: async ({ directory }) => [...(await manager.notebooks(directory))],
       bind: (input) => manager.bind(input),
-      start: ({ id }) => manager.start(id),
+      start: ({ id }) => manager.start(id, ctx.options),
       stop: async ({ id }) => (manager.stop(id), {}),
       unbind: async ({ id }) => (manager.unbind(id), {}),
       configure: async (settings) => (manager.configure(settings), {}),
@@ -50,7 +50,7 @@ export default Plugin.define({
 
     // Tell the agent which notebook is this session's, every request, so it never has to guess.
     await ctx.session.hook("context", (input) => {
-      const binding = manager.view(input.sessionID)
+      const binding = manager.view(input.sessionID, ctx.options)
       if (!binding) return
       // Every project's instance sees the hook; the first one to answer is enough.
       if (input.system.some((part) => part.type === "text" && part.text.startsWith(MARKER))) return
