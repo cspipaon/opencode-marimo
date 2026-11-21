@@ -8,7 +8,7 @@ import {
   SettingsPage,
 } from "@opencode/plugin/gui";
 import { Browser } from "@opencode/plugin/gui/browser";
-import { createEffect, createSignal, Show, type JSX } from "solid-js";
+import { createEffect, createResource, createSignal, For, Show, type JSX } from "solid-js";
 import {
   Binding as BindingSchema,
   Marimo,
@@ -470,6 +470,17 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       // What the user typed, so IPC round trips on every keystroke can't move the caret. Until then, the saved value.
       const [draft, setDraft] = createSignal<string>();
       const [idleDraft, setIdleDraft] = createSignal<string>();
+      const [entries, { refetch }] = createResource(localServer, server => api(server).environments({}));
+      const remove = async (directory: string) => {
+        const server = localServer();
+        if (!server) return;
+        try {
+          await api(server).environment({ directory, set: "default" }, { location: { directory } });
+          await refetch();
+        } catch (error) {
+          ctx.toast.show({ variant: "error", title: `Could not remove environment: ${error instanceof Error ? error.message : JSON.stringify(error)}` });
+        }
+      };
       const chooseEnvironment = async () => {
         const server = localServer();
         if (!server) return;
@@ -479,7 +490,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
           const rpc = api(server);
           const location = { location: { directory } };
           const active = await rpc.environment({ directory }, location);
-          const modes = ["default", "sandbox", "pixi"] as const;
+          const modes = ["default", "sandbox", "pixi", "uv"] as const;
           const set = await ctx.dialogs.select<typeof modes[number]>({
             title: `${ctx.t("settings.environment")}: ${directory}`,
             options: modes.map((value) => ({
@@ -489,6 +500,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
             })),
           });
           if (set && set !== active) await rpc.environment({ directory, set }, location);
+          await refetch();
         } catch (error) {
           const detail = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
           ctx.toast.show({ variant: "error", title: `Could not select notebook environment: ${detail}` });
@@ -516,6 +528,12 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
                 <Row title={ctx.t("settings.environment")} description={ctx.t("settings.environment.description")}>
                   <ctx.ui.Button onClick={() => void chooseEnvironment()}>{ctx.t("settings.environment.folder")}</ctx.ui.Button>
                 </Row>
+                <Show when={entries.error}>{ctx.t("settings.environment.loadError")}</Show>
+                <For each={entries.error ? [] : entries()}>{entry =>
+                  <Row title={entry.directory} description={ctx.t(`settings.environment.${entry.mode}`)}>
+                    <button type="button" title={ctx.t("settings.environment.remove")} aria-label={`${ctx.t("settings.environment.remove")}: ${entry.directory}`} onClick={() => void remove(entry.directory)}>×</button>
+                  </Row>
+                }</For>
                 <div data-action="marimo-studio">
                   <Row
                     title={ctx.t("settings.studio")}

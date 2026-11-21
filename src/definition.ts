@@ -14,13 +14,16 @@ export const definition = Plugin.define({
       "settings.environment.description": "Choose how notebooks in a local project start. Stop and reopen a running notebook to apply.",
       "settings.environment.default": "Use configured default",
       "settings.environment.sandbox": "Isolated notebook sandbox",
-      "settings.environment.pixi": "Project’s Pixi environment (requires marimo; turn off Studio)",
+      "settings.environment.pixi": "Project’s Pixi environment",
+      "settings.environment.uv": "Project’s uv environment",
+      "settings.environment.remove": "Remove override and use configured default",
+      "settings.environment.loadError": "Could not load saved project environments.",
       "settings.environment.selected": "Currently selected",
       "settings.description":
         "How each session's notebook starts. Changes apply the next time a notebook starts.",
       "settings.studio": "Use marimo-studio",
       "settings.studio.description":
-        "Open notebooks with marimo-studio's Notebook and Preview views, for reports, slides and papers.",
+        "Launch sandbox notebooks with marimo-studio's Notebook and Preview views. Project environments use their own installed packages.",
       "settings.version": "marimo-studio version",
       "settings.version.description":
         "Empty for the latest. Studio is experimental, so pin one: 0.4.1 or marimo-studio==0.4.1.",

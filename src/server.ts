@@ -20,6 +20,7 @@ interface Stored {
 }
 
 interface Running {
+  uv: boolean
   pixi: boolean
   proc: ChildProcess
   ready: Promise<string>
@@ -32,6 +33,7 @@ interface Running {
 
 /** What the agent half reads about a session's notebook. */
 export interface View {
+  readonly uv: boolean
   readonly pixi: boolean
   readonly notebook: string
   readonly port: number
@@ -270,11 +272,12 @@ function createManager(options: Record<string, unknown>) {
   return {
     state,
     notebooks: findNotebooks,
+    supportsUv: true,
 
     /** The session's notebook, for the agent's context and marimo-pair's token. */
     view: (id: string, options: Record<string, unknown>): View | undefined => {
       const b = bindings[id]
-      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: running.get(id)?.pixi ?? usesPixi(b.directory, options) }
+      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), uv: running.get(id)?.uv ?? options.uvProject === b.directory, pixi: running.get(id)?.pixi ?? usesPixi(b.directory, options) }
     },
     /** The token of the notebook a shell command talks to, by its port. */
     tokenFor: (command: string) =>
@@ -327,13 +330,14 @@ function createManager(options: Record<string, unknown>) {
       }
 
       const pixi = usesPixi(binding.directory, options)
-      if (pixi && settings.studio) throw new Error("Turn off marimo-studio before starting a Pixi project notebook.")
+      const uv = options.uvProject === binding.directory
+      if (uv && !existsSync(join(binding.directory, "pyproject.toml"))) throw new Error("Select the uv project root containing pyproject.toml.")
       const edit = [
         "edit",
         "--headless",
         "--skip-update-check",
         "--watch",
-        pixi ? "--no-sandbox" : "--sandbox",
+        pixi || uv ? "--no-sandbox" : "--sandbox",
         "--port",
         String(binding.port),
         "--token-password-file",
@@ -341,8 +345,8 @@ function createManager(options: Record<string, unknown>) {
         binding.notebook,
       ]
       // marimo-studio is a marimo extension: uvx runs marimo with it installed alongside.
-      const studio = settings.studio ? studioRequirement(settings.requirement) : null
-      const launcher = pixi ? ["pixi", "run", "python", "-m", "marimo"] : studio ? ["uvx", "--with", studio, "marimo"] : command
+      const studio = !pixi && !uv && settings.studio ? studioRequirement(settings.requirement) : null
+      const launcher = pixi ? ["pixi", "run", "python", "-m", "marimo"] : uv ? ["uv", "run", "--project", binding.directory, "--no-sync", "python", "-m", "marimo"] : studio ? ["uvx", "--with", studio, "marimo"] : command
       const [file, ...args] = [...launcher, ...edit]
       const proc = spawn(file!, args, {
         cwd: binding.directory,
@@ -363,7 +367,7 @@ function createManager(options: Record<string, unknown>) {
         proc.on("error", fail)
         proc.on("exit", (code) => fail(new Error(`marimo exited (${code}): ${output.trim().slice(-500)}`)))
       })
-      const it: Running = { proc, ready, up: false, studio, pixi, seen: Date.now() }
+      const it: Running = { proc, ready, up: false, studio, pixi, uv, seen: Date.now() }
       running.set(id, it)
       changed()
 

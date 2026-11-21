@@ -15,7 +15,7 @@ const instructions = (b: View) => {
     `Do not run discover-servers.sh or look for other marimo servers: other servers on this machine belong to other work.`,
     `Use the marimo-pair skill's execute-code.sh with --url ${url}/. MARIMO_TOKEN is added to the environment automatically`,
     `for shell commands that mention ${url}, so --token is optional.`,
-    b.pixi
+    b.uv ? `The notebook uses the project's uv environment with --no-sandbox. Manage dependencies with uv.` : b.pixi
       ? `The notebook is configured to run in the project's Pixi environment with --watch --no-sandbox. Manage dependencies with Pixi.`
       : `The notebook runs with --watch (edits to the file reload) and --sandbox (dependencies live in its PEP 723 header).`,
     b.status === "running"
@@ -43,8 +43,8 @@ export default Plugin.define({
     const key = `notebook-environment:${directory}`
     const launchOptions = async () => {
       const mode = await ctx.storage.get(key)
-      if (mode !== "pixi" && mode !== "sandbox") return ctx.options
-      return { ...ctx.options, pixiProjects: mode === "pixi" ? [directory] : [] }
+      if (mode !== "pixi" && mode !== "sandbox" && mode !== "uv") return ctx.options
+      return { ...ctx.options, uvProject: mode === "uv" ? directory : undefined, pixiProjects: mode === "pixi" ? [directory] : [] }
     }
 
     // Desktop windows drive the notebooks of this server's sessions, wherever this server runs.
@@ -52,16 +52,32 @@ export default Plugin.define({
       state: async () => manager.state(),
       notebooks: async ({ directory }) => [...(await manager.notebooks(directory))],
       bind: (input) => manager.bind(input),
-      start: async ({ id }) => manager.start(id, await launchOptions()),
+      start: async ({ id }) => {
+        const options = await launchOptions()
+        if (options.uvProject && !manager.supportsUv) throw new Error("The previous notebook manager is still loaded. Save your notebooks and restart the OpenCode service before launching a uv project.")
+        return manager.start(id, options)
+      },
       stop: async ({ id }) => (manager.stop(id), {}),
       unbind: async ({ id }) => (manager.unbind(id), {}),
       configure: async (settings) => (manager.configure(settings), {}),
+      environments: async () => {
+        const prefix = "notebook-environment:"
+        const rows = []
+        let after: string | undefined
+        do {
+          const page = await ctx.storage.scan({ prefix, after })
+          for (const { key, value } of page.entries)
+            if (value === "pixi" || value === "sandbox" || value === "uv") rows.push({ directory: key.slice(prefix.length), mode: value as "pixi" | "sandbox" | "uv" })
+          after = page.next
+        } while (after)
+        return rows
+      },
       environment: async ({ directory: requested, set }) => {
         if (resolve(requested) !== directory) throw new Error("Open settings for the selected project directory.")
         if (set === "default") await ctx.storage.remove(key)
         else if (set) await ctx.storage.set(key, set)
         const mode = await ctx.storage.get(key)
-        return mode === "pixi" || mode === "sandbox" ? mode : "default"
+        return mode === "pixi" || mode === "sandbox" || mode === "uv" ? mode : "default"
       },
     })
     const unsubscribe = manager.subscribe((state) => void rpc.events.emit("changed", state).catch(() => undefined))

@@ -35,15 +35,19 @@ Add the plugin to `~/.config/opencode/opencode.json` and restart OpenCode Deskto
 `command` is optional: an absolute path to marimo if it isn't on a standard path.
 
 In **Settings → marimo → Project environment → Choose project…**, select the
-folder you open in Desktop, then select **Project’s Pixi environment**.
+folder you open in Desktop, then select **Project’s Pixi environment** or
+**Project’s uv environment**. Both use that project's Python, so install marimo
+there first. For uv, open the folder containing `pyproject.toml` and sync its
+environment first: the plugin uses `uv run --no-sync` to reuse it.
 Stop and reopen the notebook to apply it. **Isolated notebook sandbox** forces
-the sandbox; **Use configured default** clears the override for that folder.
+the sandbox; **Use configured default** or the × beside a saved selection clears
+the override for that folder without removing its environment or packages.
 
 Alternatively (including on an SSH server), set `"pixiProjects": ["/absolute/path/to/project"]`
 in the plugin's `options` and open that project directory in Desktop. Install marimo
 in the project's default Pixi environment. For listed directories the plugin runs
 `pixi run python -m marimo edit --no-sandbox` instead of using inline dependencies.
-Turn off Studio for these notebooks. Other projects keep their usual sandbox.
+Studio's `uvx --with` launcher applies only to sandbox notebooks.
 
 To run from a checkout instead, `bun install && bun run build` in the repo and point `"package"` at its path.
 
