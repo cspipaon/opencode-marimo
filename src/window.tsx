@@ -109,6 +109,10 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const settings = (): Settings =>
     stateOf(localServer())?.settings ?? { studio: false, requirement: "", idle: 30 };
   const current = () => ctx.sessions.current();
+  const composerModel = () => {
+    const selected = ctx.screen.current()?.composer.model();
+    return selected && { providerID: selected.providerID, id: selected.modelID, variant: selected.variant };
+  };
   const fileName = (path: string) => path.split("/").pop() ?? path;
   // Sessions "New marimo session" created, by `SessionRef.key`, until their tab mounts.
   const pending = new Map<
@@ -208,6 +212,14 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   // Sends the pairing prompt (same shape as molab's) as a real message, with the marimo-pair skill attached, so the
   // agent connects right away and confirms with a toast inside marimo.
   const connect = async (session: MountedSession, url: string) => {
+    const model = current()?.key === session.key ? composerModel() : undefined;
+    if (!model) {
+      ctx.toast.show({ title: ctx.t("connect.selectModel") });
+      return;
+    }
+    // Direct API prompts bypass the Desktop composer and use the server-side
+    // session model. Persist the visible selection before enqueueing either prompt.
+    await session.server.client.session.switchModel({ sessionID: session.id, model });
     const parsed = new URL(url);
     const params = {
       url: `${parsed.origin}/`,
@@ -319,6 +331,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       ctx.toast.show({ variant: "error", title: ctx.t("noserver") });
       return;
     }
+    const model = current()?.server.id === server.id ? composerModel() : undefined;
     const directory = await chooseFolder(server);
     if (!directory) return;
     const choice = await choose(server, directory);
@@ -330,6 +343,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     try {
       const session = await server.client.session.create({
         location: { directory },
+        model,
       });
       created = { server: server.id, id: session.id };
       const name = await claim(server, {

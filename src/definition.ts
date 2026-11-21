@@ -8,6 +8,7 @@ export const definition = Plugin.define({
       "command.unbind": "Release marimo notebook",
       "command.new": "New marimo session",
       "command.settings": "marimo settings",
+      "connect.selectModel": "Notebook open. Select a model in this session, then use the marimo menu to pair.",
       "settings.title": "marimo",
       "settings.environment": "Project environment",
       "settings.environment.folder": "Choose project…",
