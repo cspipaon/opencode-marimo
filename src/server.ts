@@ -31,6 +31,7 @@ interface Running {
 
 /** What the agent half reads about a session's notebook. */
 export interface View {
+  readonly pixi: boolean
   readonly notebook: string
   readonly port: number
   readonly token: string
@@ -68,7 +69,7 @@ if __name__ == "__main__":
 
 // Servers started from a GUI or a service don't always inherit the shell's PATH, so add the usual install locations.
 const searchPath = () =>
-  [process.env.PATH, join(homedir(), ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(delimiter)
+  [process.env.PATH, join(homedir(), ".pixi/bin"), join(homedir(), ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(delimiter)
 
 const onPath = (name: string) =>
   searchPath()
@@ -167,6 +168,11 @@ function load(options: Record<string, unknown>) {
 }
 
 function createManager(options: Record<string, unknown>) {
+  const pixiProjects = new Set(
+    Array.isArray(options.pixiProjects)
+      ? options.pixiProjects.filter((p): p is string => typeof p === "string" && isAbsolute(p)).map((p) => resolve(p))
+      : [],
+  )
   // marimo itself when it is installed, else uv runs it (a fresh machine often has uv but not marimo).
   const command =
     typeof options.command === "string" ? [options.command] : onPath("marimo") ? ["marimo"] : ["uvx", "marimo"]
@@ -268,7 +274,7 @@ function createManager(options: Record<string, unknown>) {
     /** The session's notebook, for the agent's context and marimo-pair's token. */
     view: (id: string): View | undefined => {
       const b = bindings[id]
-      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id) }
+      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: pixiProjects.has(resolve(b.directory)) }
     },
     /** The token of the notebook a shell command talks to, by its port. */
     tokenFor: (command: string) =>
@@ -320,12 +326,14 @@ function createManager(options: Record<string, unknown>) {
         save(id, binding)
       }
 
+      const pixi = pixiProjects.has(resolve(binding.directory))
+      if (pixi && settings.studio) throw new Error("Turn off marimo-studio before starting a Pixi project notebook.")
       const edit = [
         "edit",
         "--headless",
         "--skip-update-check",
         "--watch",
-        "--sandbox",
+        pixi ? "--no-sandbox" : "--sandbox",
         "--port",
         String(binding.port),
         "--token-password-file",
@@ -334,7 +342,8 @@ function createManager(options: Record<string, unknown>) {
       ]
       // marimo-studio is a marimo extension: uvx runs marimo with it installed alongside.
       const studio = settings.studio ? studioRequirement(settings.requirement) : null
-      const [file, ...args] = studio ? ["uvx", "--with", studio, "marimo", ...edit] : [...command, ...edit]
+      const launcher = pixi ? ["pixi", "run", "python", "-m", "marimo"] : studio ? ["uvx", "--with", studio, "marimo"] : command
+      const [file, ...args] = [...launcher, ...edit]
       const proc = spawn(file!, args, {
         cwd: binding.directory,
         detached: true,

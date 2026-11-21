@@ -14,7 +14,9 @@ const instructions = (b: View) => {
     `Do not run discover-servers.sh or look for other marimo servers: other servers on this machine belong to other work.`,
     `Use the marimo-pair skill's execute-code.sh with --url ${url}/. MARIMO_TOKEN is added to the environment automatically`,
     `for shell commands that mention ${url}, so --token is optional.`,
-    `The notebook runs with --watch (edits to the file reload) and --sandbox (dependencies live in its PEP 723 header).`,
+    b.pixi
+      ? `The notebook is configured to run in the project's Pixi environment with --watch --no-sandbox. Manage dependencies with Pixi.`
+      : `The notebook runs with --watch (edits to the file reload) and --sandbox (dependencies live in its PEP 723 header).`,
     b.status === "running"
       ? `marimo-pair needs the notebook open in an editor; the user has it in OpenCode's side pane.`
       : `It is not running right now: ask the user to start it from the marimo pill above the message box.`,
