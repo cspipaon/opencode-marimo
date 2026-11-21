@@ -29,6 +29,7 @@ export const State = Schema.Struct({ bindings: Schema.Array(Binding), settings: 
 
 const Session = Schema.Struct({ id: Schema.String })
 const Empty = Schema.Struct({})
+const Environment = Schema.Literals(["default", "sandbox", "pixi"])
 
 /**
  * Between every Desktop window and the plugin's server part, which owns the bindings and `marimo edit` processes on
@@ -53,6 +54,10 @@ export const Marimo = {
     /** Stops the session's notebook and releases the notebook and its port. */
     unbind: { input: portable(Session), output: portable(Empty) },
     configure: { input: portable(Settings), output: portable(Empty) },
+    environment: {
+      input: portable(Schema.Struct({ directory: Schema.String, set: Schema.optional(Environment) })),
+      output: portable(Environment),
+    },
   },
   events: {
     changed: { schema: portable(State) },

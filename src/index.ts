@@ -45,6 +45,7 @@ export default Plugin.define({
       stop: async ({ id }) => (manager.stop(id), {}),
       unbind: async ({ id }) => (manager.unbind(id), {}),
       configure: async (settings) => (manager.configure(settings), {}),
+      environment: async ({ directory, set }) => manager.environment(directory, set),
     })
     const unsubscribe = manager.subscribe((state) => void rpc.events.emit("changed", state).catch(() => undefined))
 

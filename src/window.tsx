@@ -282,7 +282,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   };
 
   // The landing page keeps its folder to itself, so ask: the server's projects, most recently active first.
-  const chooseFolder = async (server: ServerRef) => {
+  const chooseFolder = async (server: ServerRef, title = ctx.t("folder.title")) => {
     if (server.data.project.list().length === 0)
       await server.data.project.sync();
     const projects = server.data.project
@@ -298,7 +298,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }));
     if (ctx.desktop) options.push({ title: ctx.t("folder.pick"), value: null });
     const folder = await ctx.dialogs.select<string | null>({
-      title: ctx.t("folder.title"),
+      title,
       placeholder: ctx.t("folder.placeholder"),
       options,
     });
@@ -306,7 +306,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const [picked] =
       (await ctx.desktop?.pick({
         directory: true,
-        title: ctx.t("folder.title"),
+        title,
       })) ?? [];
     return picked;
   };
@@ -470,6 +470,28 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       // What the user typed, so IPC round trips on every keystroke can't move the caret. Until then, the saved value.
       const [draft, setDraft] = createSignal<string>();
       const [idleDraft, setIdleDraft] = createSignal<string>();
+      const chooseEnvironment = async () => {
+        const server = localServer();
+        if (!server) return;
+        try {
+          const directory = await chooseFolder(server, ctx.t("settings.environment.folder"));
+          if (!directory) return;
+          const rpc = api(server);
+          const active = await rpc.environment({ directory });
+          const modes = ["default", "sandbox", "pixi"] as const;
+          const set = await ctx.dialogs.select<typeof modes[number]>({
+            title: `${ctx.t("settings.environment")}: ${directory}`,
+            options: modes.map((value) => ({
+              title: ctx.t(`settings.environment.${value}`),
+              description: active === value ? ctx.t("settings.environment.selected") : undefined,
+              value,
+            })),
+          });
+          if (set && set !== active) await rpc.environment({ directory, set });
+        } catch (error) {
+          ctx.toast.show({ variant: "error", title: String(error) });
+        }
+      };
       const configure = (next: Partial<Settings>) => {
         const server = localServer();
         if (server) void api(server).configure({ ...settings(), ...next });
@@ -489,6 +511,9 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
           <div class="settings-tab-body settings-tab-body--sectioned">
             <section class="settings-section" aria-label={ctx.t("settings.title")}>
               <div data-component="settings-list">
+                <Row title={ctx.t("settings.environment")} description={ctx.t("settings.environment.description")}>
+                  <ctx.ui.Button onClick={() => void chooseEnvironment()}>{ctx.t("settings.environment.folder")}</ctx.ui.Button>
+                </Row>
                 <div data-action="marimo-studio">
                   <Row
                     title={ctx.t("settings.studio")}

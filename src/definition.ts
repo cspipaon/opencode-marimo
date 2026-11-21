@@ -9,6 +9,13 @@ export const definition = Plugin.define({
       "command.new": "New marimo session",
       "command.settings": "marimo settings",
       "settings.title": "marimo",
+      "settings.environment": "Project environment",
+      "settings.environment.folder": "Choose project…",
+      "settings.environment.description": "Choose how notebooks in a local project start. Stop and reopen a running notebook to apply.",
+      "settings.environment.default": "Use configured default",
+      "settings.environment.sandbox": "Isolated notebook sandbox",
+      "settings.environment.pixi": "Project’s Pixi environment (requires marimo; turn off Studio)",
+      "settings.environment.selected": "Currently selected",
       "settings.description":
         "How each session's notebook starts. Changes apply the next time a notebook starts.",
       "settings.studio": "Use marimo-studio",

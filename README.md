@@ -34,7 +34,12 @@ Add the plugin to `~/.config/opencode/opencode.json` and restart OpenCode Deskto
 
 `command` is optional: an absolute path to marimo if it isn't on a standard path.
 
-To reuse an existing Pixi environment, set `"pixiProjects": ["/absolute/path/to/project"]`
+In **Settings → marimo → Project environment → Choose project…**, select the
+folder you open in Desktop, then select **Project’s Pixi environment**.
+Stop and reopen the notebook to apply it. **Isolated notebook sandbox** forces
+the sandbox; **Use configured default** clears the override for that folder.
+
+Alternatively (including on an SSH server), set `"pixiProjects": ["/absolute/path/to/project"]`
 in the plugin's `options` and open that project directory in Desktop. Install marimo
 in the project's default Pixi environment. For listed directories the plugin runs
 `pixi run python -m marimo edit --no-sandbox` instead of using inline dependencies.

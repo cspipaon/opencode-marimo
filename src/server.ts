@@ -9,6 +9,7 @@ import type { Binding, Settings as SettingsSchema, State } from "./contract"
 
 type Settings = typeof SettingsSchema.Type
 type Status = (typeof Binding.Type)["status"]
+type Environments = Record<string, "pixi" | "sandbox">
 
 // What a session owns, persisted so it keeps the same notebook, port and URL across restarts.
 interface Stored {
@@ -160,11 +161,12 @@ function load(options: Record<string, unknown>) {
     const saved = JSON.parse(readFileSync(STATE_FILE, "utf8"))
     return {
       bindings: (saved.bindings ?? {}) as Record<string, Stored>,
+      environments: (saved.environments ?? {}) as Environments,
       // Saved settings win, but settings added since they were saved keep their defaults.
       settings: { ...defaults, ...saved.settings } as Settings,
     }
   } catch {
-    return { bindings: {} as Record<string, Stored>, settings: defaults }
+    return { bindings: {} as Record<string, Stored>, environments: {} as Environments, settings: defaults }
   }
 }
 
@@ -176,7 +178,9 @@ function createManager(options: Record<string, unknown>) {
   // marimo itself when it is installed, else uv runs it (a fresh machine often has uv but not marimo).
   const command =
     typeof options.command === "string" ? [options.command] : onPath("marimo") ? ["marimo"] : ["uvx", "marimo"]
-  let { bindings, settings } = load(options)
+  let { bindings, settings, environments } = load(options)
+  const pixiFor = (directory: string, opts: Record<string, unknown>) =>
+    (environments[resolve(directory)] ?? (usesPixi(directory, opts) ? "pixi" : "sandbox")) === "pixi"
   const running = new Map<string, Running>()
   const listeners = new Set<(state: typeof State.Type) => void>()
   let users = 0
@@ -203,7 +207,7 @@ function createManager(options: Record<string, unknown>) {
   const persist = () => {
     try {
       mkdirSync(dirname(STATE_FILE), { recursive: true, mode: 0o700 })
-      writeFileSync(STATE_FILE, JSON.stringify({ bindings, settings }, null, 2), { mode: 0o600 })
+      writeFileSync(STATE_FILE, JSON.stringify({ bindings, settings, environments }, null, 2), { mode: 0o600 })
     } catch (error) {
       console.error("[opencode-marimo] could not save state", error)
     }
@@ -270,11 +274,21 @@ function createManager(options: Record<string, unknown>) {
   return {
     state,
     notebooks: findNotebooks,
+    environment: (directory: string, set?: "default" | "sandbox" | "pixi") => {
+      if (!isAbsolute(directory)) throw new Error("Select an absolute project directory.")
+      const key = resolve(directory)
+      if (set !== undefined) {
+        if (set === "default") delete environments[key]
+        else environments[key] = set
+        persist()
+      }
+      return environments[key] ?? "default" as const
+    },
 
     /** The session's notebook, for the agent's context and marimo-pair's token. */
     view: (id: string, options: Record<string, unknown>): View | undefined => {
       const b = bindings[id]
-      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: running.get(id)?.pixi ?? usesPixi(b.directory, options) }
+      return b && { notebook: b.notebook, port: b.port, token: b.token, status: statusOf(id), studio: studioOf(id), pixi: running.get(id)?.pixi ?? pixiFor(b.directory, options) }
     },
     /** The token of the notebook a shell command talks to, by its port. */
     tokenFor: (command: string) =>
@@ -326,7 +340,7 @@ function createManager(options: Record<string, unknown>) {
         save(id, binding)
       }
 
-      const pixi = usesPixi(binding.directory, options)
+      const pixi = pixiFor(binding.directory, options)
       if (pixi && settings.studio) throw new Error("Turn off marimo-studio before starting a Pixi project notebook.")
       const edit = [
         "edit",
